@@ -207,64 +207,6 @@ onMounted(() => {
   stroke-width: 2px;
 }
 </style>
-<script setup lang="ts">
-import { useAnalysisApiRequester } from '@/composables/analysis-api-requester';
-import { tdt } from '@/i18n/i18n';
-import { useI18n } from 'vue-i18n';
-import Thread from '@/components/threaddump/Thread.vue';
-
-const { request } = useAnalysisApiRequester();
-const { t } = useI18n();
-
-const loading = ref(false);
-
-interface VThread {
-  id: number;
-  name: string;
-}
-
-interface VBlockingThread {
-  blockingThread: VThread;
-  blockedThreads: VThread[];
-  heldLock?: {
-    id: number;
-    address: number;
-    class: string;
-    classInstance: boolean;
-    state: string;
-  } | null;
-}
-
-const blockingThreads = ref<VBlockingThread[]>([]);
-
-// Thread detail dialog
-const threadDialogVisible = ref(false);
-const selectedIds = ref<number[]>([]);
-
-function openThread(ids: number[]) {
-  selectedIds.value = ids;
-  threadDialogVisible.value = true;
-}
-
-function blockedTitle(bt: VBlockingThread): string {
-  return t('jifa.threadDump.blockedThreads.title', bt.blockedThreads.length, {
-    blocker: bt.blockingThread.name,
-    count: bt.blockedThreads.length
-  });
-}
-
-function loadData() {
-  loading.value = true;
-  request('blockingThreads', {}).then((data: VBlockingThread[]) => {
-    blockingThreads.value = data;
-    loading.value = false;
-  });
-}
-
-onMounted(() => {
-  loadData();
-});
-</script>
 
 <template>
   <div v-loading="loading">
