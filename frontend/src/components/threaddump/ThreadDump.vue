@@ -105,6 +105,33 @@ function showThreadsOfGroup(group) {
   threadDialogVisible.value = true;
 }
 
+function showThreadsByState(threadType, state) {
+  selectedThreadType.value = threadType;
+  selectedThreadGroup.value = null;
+  selectedThreadState.value = state;
+  threadDialogVisible.value = true;
+}
+
+function showThreadsOfGroupByState(group, state) {
+  selectedThreadGroup.value = group;
+  selectedThreadType.value = null;
+  selectedThreadState.value = state;
+  threadDialogVisible.value = true;
+}
+
+const STATE_COLORS: Record<string, string> = {
+  RUNNABLE: '#67c23a',
+  BLOCKED: '#f56c6c',
+  WAITING: '#e6a23c',
+  TIMED_WAITING: '#f0c419',
+  NEW: '#409eff',
+  TERMINATED: '#909399'
+};
+
+function stateColor(state: string) {
+  return STATE_COLORS[state] ?? '#a0cfff';
+}
+
 onMounted(() => {
   loading.value = true;
   request('overview').then((overview) => {
@@ -230,16 +257,19 @@ function buildThreadStat(key, states, counts, icon, threadType?) {
             <el-table stripe :show-header="false" :data="threadStats" v-loading="loading">
               <el-table-column type="expand">
                 <template #default="{ row }">
-                  <div style="padding: 4px 12px">
-                    <el-space size="large">
-                      <el-tag
-                        disable-transitions
-                        v-for="index in sortIndices(row.counts)"
-                        :key="index"
+                  <div style="padding: 6px 12px">
+                    <div class="state-bar">
+                      <div
+                        v-for="idx in sortIndices(row.counts)"
+                        :key="idx"
+                        class="state-bar-segment"
+                        :style="{ flex: row.counts[idx], background: stateColor(row.states[idx]) }"
+                        :title="`${row.states[idx]}: ${row.counts[idx]}`"
+                        @click="showThreadsByState(row.threadType, row.states[idx])"
                       >
-                        {{ `${row.states[index]}: ${row.counts[index]}` }}
-                      </el-tag>
-                    </el-space>
+                        <span class="state-bar-label">{{ row.states[idx] }}: {{ row.counts[idx] }}</span>
+                      </div>
+                    </div>
                   </div>
                 </template>
               </el-table-column>
@@ -277,16 +307,19 @@ function buildThreadStat(key, states, counts, icon, threadType?) {
             >
               <el-table-column type="expand">
                 <template #default="{ row }">
-                  <div style="padding: 4px 12px">
-                    <el-space size="large">
-                      <el-tag
-                        disable-transitions
-                        v-for="index in sortIndices(row.counts)"
-                        :key="index"
+                  <div style="padding: 6px 12px">
+                    <div class="state-bar">
+                      <div
+                        v-for="idx in sortIndices(row.counts)"
+                        :key="idx"
+                        class="state-bar-segment"
+                        :style="{ flex: row.counts[idx], background: stateColor(row.states[idx]) }"
+                        :title="`${row.states[idx]}: ${row.counts[idx]}`"
+                        @click="showThreadsOfGroupByState(row.key, row.states[idx])"
                       >
-                        {{ `${row.states[index]}: ${row.counts[index]}` }}
-                      </el-tag>
-                    </el-space>
+                        <span class="state-bar-label">{{ row.states[idx] }}: {{ row.counts[idx] }}</span>
+                      </div>
+                    </div>
                   </div>
                 </template>
               </el-table-column>
@@ -354,5 +387,36 @@ function buildThreadStat(key, states, counts, icon, threadType?) {
   display: flex;
   justify-content: flex-end;
   overflow: hidden;
+}
+
+.state-bar {
+  display: flex;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.state-bar-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4px;
+  transition: filter 0.15s;
+}
+
+.state-bar-segment:hover {
+  filter: brightness(1.15);
+}
+
+.state-bar-label {
+  padding: 0 6px;
+  font-size: 12px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 </style>
