@@ -14,6 +14,7 @@
 import { useAnalysisApiRequester } from '@/composables/analysis-api-requester';
 import { tdt } from '@/i18n/i18n';
 import { useI18n } from 'vue-i18n';
+import Thread from '@/components/threaddump/Thread.vue';
 
 const { request } = useAnalysisApiRequester();
 const { t } = useI18n();
@@ -37,7 +38,7 @@ const selectedThreadIds = ref<number[]>([]);
 function loadData() {
   loading.value = true;
   diagnostics.value = [];
-  request('analyze', {}).then((data: DiagnosticEntry[]) => {
+  request('diagnose', {}).then((data: DiagnosticEntry[]) => {
     if (!data || data.length === 0) {
       diagnostics.value = [{ severity: 'OK', type: 'NO_ISSUES', params: {} }];
     } else {
@@ -62,12 +63,14 @@ function severityIcon(severity: string): string {
 }
 
 function messageText(row: DiagnosticEntry): string {
+  if (!row.type) return '';
   const key = `jifa.threadDump.diagnosis.type.${row.type}`;
   const count: number = row.params?.count ?? 0;
   return t(key, count, row.params);
 }
 
 function suggestionText(row: DiagnosticEntry): string {
+  if (!row.type) return '';
   return t(`jifa.threadDump.diagnosis.type.${row.type}_SUGGESTION`);
 }
 

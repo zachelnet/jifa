@@ -104,13 +104,15 @@ onMounted(() => {
 <template>
   <div v-loading="loading">
     <p style="margin: 0 0 8px; font-weight: 500">{{ tdt('cpuConsumingThreads.title') }}</p>
-    <Bar
-      v-if="threads.length > 0"
-      :data="chartData"
-      :options="chartOptions"
-      style="height: 360px; cursor: pointer"
-    />
-    <el-empty v-else :description="'-'" />
+    <div style="height: 360px; position: relative">
+      <Bar
+        v-if="threads.length > 0"
+        :data="chartData"
+        :options="chartOptions"
+        style="cursor: pointer"
+      />
+    </div>
+    <el-empty v-if="!loading && threads.length === 0" :description="'-'" />
 
     <el-dialog v-model="threadDialogVisible" width="80%" destroy-on-close>
       <Thread :ids="selectedThreadId != null ? [selectedThreadId] : []" />
