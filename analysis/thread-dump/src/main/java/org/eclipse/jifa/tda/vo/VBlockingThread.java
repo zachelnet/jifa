@@ -1,5 +1,5 @@
 /********************************************************************************
- * Copyright (c) 2022, 2023 Contributors to the Eclipse Foundation
+ * Copyright (c) 2023 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -13,26 +13,23 @@
 
 package org.eclipse.jifa.tda.vo;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
+import java.util.List;
+
+/**
+ * Value object representing a thread that is blocking one or more other threads
+ * via monitor ownership.
+ */
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class VThread {
+public class VBlockingThread {
 
-    private int id;
+    /** The thread that holds the monitor. */
+    private VThread blockingThread;
 
-    private String name;
+    /** The threads waiting to acquire the monitor held by {@link #blockingThread}. */
+    private List<VThread> blockedThreads;
 
-    /**
-     * CPU time in milliseconds; {@code null} if unknown / not available.
-     */
-    private Double cpu;
-
-    /**
-     * Elapsed (wall-clock) time in milliseconds; {@code null} if unknown.
-     */
-    private Double elapsed;
+    /** The monitor that is the source of the contention, or {@code null} if unknown. */
+    private VMonitor heldLock;
 }
