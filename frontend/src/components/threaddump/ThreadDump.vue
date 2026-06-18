@@ -11,8 +11,6 @@
     SPDX-License-Identifier: EPL-2.0
  -->
 <script setup lang="ts">
-import { ArcElement, Chart, Legend, Tooltip } from 'chart.js';
-import { Doughnut } from 'vue-chartjs';
 import { tdt } from '@/i18n/i18n';
 import { useAnalysisApiRequester } from '@/composables/analysis-api-requester';
 import { prettyTime } from '@/support/utils';
@@ -30,8 +28,6 @@ import Content from '@/components/threaddump/Content.vue';
 import Thread from '@/components/threaddump/Thread.vue';
 import Monitor from '@/components/threaddump/Monitor.vue';
 import CallSiteTree from '@/components/threaddump/CallSiteTree.vue';
-
-Chart.register(ArcElement, Tooltip, Legend);
 import Diagnose from '@/components/threaddump/Diagnose.vue';
 import CpuConsumingThreads from '@/components/threaddump/CpuConsumingThreads.vue';
 import BlockedThreads from '@/components/threaddump/BlockedThreads.vue';
@@ -105,6 +101,7 @@ function showThreads(type) {
 function showThreadsOfGroup(group) {
   selectedThreadGroup.value = group;
   selectedThreadType.value = null;
+  selectedThreadState.value = null;
   threadDialogVisible.value = true;
 }
 
@@ -136,18 +133,6 @@ onMounted(() => {
       }
     ];
 
-const COLOR_PALETTE = [
-  '#003f5c', '#2f4b7c', '#665191', '#a05195', '#d45087',
-  '#f95d6a', '#ff7c43', '#ffa600', '#488f31', '#8aa1b4'
-];
-
-function buildChartData(states: string[], counts: number[]) {
-  return {
-    labels: states,
-    datasets: [{ data: counts, backgroundColor: COLOR_PALETTE }]
-  };
-}
-
 function buildThreadStat(key, states, counts, icon, threadType?) {
   return {
     key,
@@ -155,26 +140,7 @@ function buildThreadStat(key, states, counts, icon, threadType?) {
     states,
     counts,
     icon: shallowRef(icon),
-    threadType,
-    chartData: buildChartData(states, counts)
-  };
-}
-
-// Chart options scoped per row – clicking a segment filters by that state
-function chartOptionsForRow(row) {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { position: 'right' as const } },
-    onClick: (_e: any, elements: any[]) => {
-      if (elements.length && row.threadType) {
-        const stateIndex = elements[0].index;
-        selectedThreadState.value = String(row.states[stateIndex]);
-        selectedThreadType.value = row.threadType;
-        selectedThreadGroup.value = null;
-        threadDialogVisible.value = true;
-      }
-    }
+    threadType
   };
 }
 
@@ -264,12 +230,16 @@ function chartOptionsForRow(row) {
             <el-table stripe :show-header="false" :data="threadStats" v-loading="loading">
               <el-table-column type="expand">
                 <template #default="{ row }">
-                  <div style="height: 200px; padding: 8px 16px">
-                    <Doughnut
-                      :data="row.chartData"
-                      :options="chartOptionsForRow(row)"
-                      style="height: 180px"
-                    />
+                  <div style="padding: 4px 12px">
+                    <el-space size="large">
+                      <el-tag
+                        disable-transitions
+                        v-for="index in sortIndices(row.counts)"
+                        :key="index"
+                      >
+                        {{ `${row.states[index]}: ${row.counts[index]}` }}
+                      </el-tag>
+                    </el-space>
                   </div>
                 </template>
               </el-table-column>
