@@ -24,12 +24,15 @@ services:
       - "8102:8102"
     volumes:
       - jifa-storage:/jifa-storage
+      # Mount host Java truststore so internal Seeburger CA certificates are trusted
+      # (required for Keycloak TLS – host must have the certs in its Java truststore)
+      - /etc/ssl/certs/java/cacerts:/opt/java/openjdk/lib/security/cacerts:ro
     environment:
       # ── Basic settings ──
       # Allow users to log in (required for Keycloak / local accounts)
-      JIFA_ALLOW_LOGIN: "false"
+      JIFA_ALLOW_LOGIN: "true"
       # Allow unauthenticated access (set to false when using Keycloak)
-      JIFA_ALLOW_ANONYMOUS_ACCESS: "true"
+      JIFA_ALLOW_ANONYMOUS_ACCESS: "false"
       # Allow new user self-registration
       JIFA_ALLOW_REGISTRATION: "false"
 
@@ -43,10 +46,18 @@ services:
       # MYSQL_USER: jifa
       # MYSQL_PASSWORD: jifa
 
-      # ── Keycloak OIDC (comment in and set JIFA_ALLOW_LOGIN=true) ──
-      # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID: jifa
-      # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET: <your-secret>
-      # SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI: https://your-keycloak.example.com/realms/your-realm
+      # ── Keycloak OIDC ──────────────────────────────────────────────────────
+      # NOTE: ALL three vars must be set together, otherwise Spring Boot will
+      # fail to start with "Provider ID must be specified for client registration 'keycloak'".
+      # Also set JIFA_ALLOW_LOGIN=true and JIFA_ALLOW_ANONYMOUS_ACCESS=false.
+      #
+      # Keycloak Admin → Client → Valid redirect URIs:
+      #   http://web-dump-analyzer.test-kube.dev.seeburger.de:8102/login/oauth2/code/keycloak
+      #SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI: https://auth.dev.seeburger.de:8443/realms/sub
+      #SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID: jifa
+      #SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET:
+      # Needed when behind proxy/ingress so Spring builds the correct redirect URI from X-Forwarded-* headers:
+      #SERVER_FORWARD_HEADERS_STRATEGY: NATIVE
 
     # Wait for DB if MySQL is enabled
     # depends_on:

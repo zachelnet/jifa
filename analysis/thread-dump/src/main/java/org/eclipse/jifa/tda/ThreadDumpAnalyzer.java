@@ -441,13 +441,13 @@ public class ThreadDumpAnalyzer {
     }
 
     /**
-     * Analyses the thread dump for potential issues based on the given
+     * Diagnoses the thread dump for potential issues based on the given
      * configuration and returns any issues found.
      *
      * @param config the configuration to use; a default config is used if {@code null}
      * @return potentially empty list of diagnostic issues
      */
-    public List<Diagnostic> analyze(
+    public List<Diagnostic> diagnose(
             @ApiParameterMeta(required = false) ThreadDumpAnalysisConfig config) {
         return new ThreadDumpDiagnoser().analyze(
                 snapshot,

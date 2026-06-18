@@ -114,7 +114,7 @@ public class TestDiagnoser extends TestBase {
     @Test
     public void testAnalyze_defaultConfig_findsBlockedThreads() {
         // Default threshold is 3; the dump has 4 blocked threads → should fire
-        List<Diagnostic> diagnostics = tda.analyze(null);
+        List<Diagnostic> diagnostics = tda.diagnose(null);
         assertTrue(diagnostics.stream()
                 .anyMatch(d -> d.getType() == Type.HIGH_BLOCKED_THREAD_COUNT),
                 "Expected HIGH_BLOCKED_THREAD_COUNT diagnostic");
@@ -122,7 +122,7 @@ public class TestDiagnoser extends TestBase {
 
     @Test
     public void testAnalyze_blockedDiagnosticSeverity() {
-        List<Diagnostic> diagnostics = tda.analyze(null);
+        List<Diagnostic> diagnostics = tda.diagnose(null);
         Diagnostic d = diagnostics.stream()
                 .filter(x -> x.getType() == Type.HIGH_BLOCKED_THREAD_COUNT)
                 .findFirst().orElseThrow();
@@ -131,7 +131,7 @@ public class TestDiagnoser extends TestBase {
 
     @Test
     public void testAnalyze_blockedDiagnosticParams() {
-        List<Diagnostic> diagnostics = tda.analyze(null);
+        List<Diagnostic> diagnostics = tda.diagnose(null);
         Diagnostic d = diagnostics.stream()
                 .filter(x -> x.getType() == Type.HIGH_BLOCKED_THREAD_COUNT)
                 .findFirst().orElseThrow();
@@ -142,7 +142,7 @@ public class TestDiagnoser extends TestBase {
     public void testAnalyze_raisedThreshold_noBlockedDiagnostic() {
         ThreadDumpAnalysisConfig config = new ThreadDumpAnalysisConfig();
         config.setHighBlockedThreadsThreshold(10); // higher than 4 blocked threads
-        List<Diagnostic> diagnostics = tda.analyze(config);
+        List<Diagnostic> diagnostics = tda.diagnose(config);
         assertTrue(diagnostics.stream()
                 .noneMatch(d -> d.getType() == Type.HIGH_BLOCKED_THREAD_COUNT),
                 "No HIGH_BLOCKED_THREAD_COUNT expected when threshold is raised");
@@ -158,7 +158,7 @@ public class TestDiagnoser extends TestBase {
         config.setHighStackSizeThreshold(Integer.MAX_VALUE);
         config.setHighCpuConsumedRatio(2.0);           // ratio > 1.0 is impossible
         config.setReportThrowingException(false);
-        List<Diagnostic> diagnostics = tda.analyze(config);
+        List<Diagnostic> diagnostics = tda.diagnose(config);
         assertTrue(diagnostics.isEmpty(),
                 "All checks suppressed – list must be empty, but got: " + diagnostics);
     }

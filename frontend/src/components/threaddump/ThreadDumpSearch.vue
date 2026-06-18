@@ -11,30 +11,26 @@
     SPDX-License-Identifier: EPL-2.0
  -->
 <script setup lang="ts">
-import { ArcElement, Chart, Legend, Title, Tooltip } from 'chart.js';
-import { Doughnut } from 'vue-chartjs';
 import { tdt } from '@/i18n/i18n';
 import { useAnalysisApiRequester } from '@/composables/analysis-api-requester';
 import ThreadDumpSearchForm from './ThreadDumpSearchForm.vue';
 import type { SearchModel } from './ThreadDumpSearchForm.vue';
 import Thread from './Thread.vue';
 
-Chart.register(ArcElement, Title, Tooltip, Legend);
-
 const { request } = useAnalysisApiRequester();
 
-const COLOR_PALETTE = [
-  '#003f5c',
-  '#2f4b7c',
-  '#665191',
-  '#a05195',
-  '#d45087',
-  '#f95d6a',
-  '#ff7c43',
-  '#ffa600',
-  '#488f31',
-  '#8aa1b4'
-];
+const STATE_COLORS: Record<string, string> = {
+  RUNNABLE: '#67c23a',
+  BLOCKED: '#f56c6c',
+  WAITING: '#e6a23c',
+  TIMED_WAITING: '#f0c419',
+  NEW: '#409eff',
+  TERMINATED: '#909399'
+};
+
+function stateColor(state: string) {
+  return STATE_COLORS[state] ?? '#a0cfff';
+}
 
 interface SearchHit {
   id: number;
@@ -55,28 +51,14 @@ const selectedThreadId = ref<number | null>(null);
 
 // --- chart ---
 
-const stateChartData = computed(() => {
+const stateCounts = computed(() => {
   const counts = new Map<string, number>();
   for (const hit of searchResult.value) {
     const state = hit.javaState ?? hit.osState;
     counts.set(state, (counts.get(state) ?? 0) + 1);
   }
-  return {
-    labels: [...counts.keys()],
-    datasets: [
-      {
-        data: [...counts.values()],
-        backgroundColor: COLOR_PALETTE
-      }
-    ]
-  };
+  return counts;
 });
-
-const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { position: 'bottom' as const } }
-};
 
 // --- helpers ---
 
@@ -157,15 +139,23 @@ async function doSearch(model: SearchModel) {
       <template v-if="searched && !loading">
         <!-- summary row -->
         <el-row v-if="searchResult.length > 0" :gutter="16" style="margin-top: 16px">
-          <el-col :span="7">
-            <el-card :header="tdt('threadDumpSearch.threadStatesChartTitle')" style="height: 200px">
-              <Doughnut :data="stateChartData" :options="chartOptions" style="height: 140px" />
+          <el-col :span="24">
+            <el-card :header="tdt('threadDumpSearch.threadStatesChartTitle')">
+              <div class="state-bar">
+                <div
+                  v-for="[state, count] in stateCounts"
+                  :key="state"
+                  class="state-bar-segment"
+                  :style="{ flex: count, background: stateColor(state) }"
+                  :title="`${state}: ${count}`"
+                >
+                  <span class="state-bar-label">{{ state }}: {{ count }}</span>
+                </div>
+              </div>
+              <el-tag type="info" size="large" style="margin-top: 8px">
+                {{ searchResult.length }} {{ tdt('threadDumpSearch.resultsCount') }}
+              </el-tag>
             </el-card>
-          </el-col>
-          <el-col :span="17" style="display: flex; align-items: center">
-            <el-tag type="info" size="large">
-              {{ searchResult.length }} {{ tdt('threadDumpSearch.resultsCount') }}
-            </el-tag>
           </el-col>
         </el-row>
 
@@ -204,6 +194,37 @@ async function doSearch(model: SearchModel) {
 </template>
 
 <style scoped>
+.state-bar {
+  display: flex;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: default;
+}
+
+.state-bar-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4px;
+  transition: filter 0.15s;
+}
+
+.state-bar-segment:hover {
+  filter: brightness(1.15);
+}
+
+.state-bar-label {
+  padding: 0 6px;
+  font-size: 12px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
 .thread-content {
   margin: 0;
   padding: 10px;
