@@ -31,6 +31,7 @@ import CallSiteTree from '@/components/threaddump/CallSiteTree.vue';
 import Diagnose from '@/components/threaddump/Diagnose.vue';
 import CpuConsumingThreads from '@/components/threaddump/CpuConsumingThreads.vue';
 import BlockedThreads from '@/components/threaddump/BlockedThreads.vue';
+import ThreadDumpSearch from '@/components/threaddump/ThreadDumpSearch.vue';
 
 const { request } = useAnalysisApiRequester();
 
@@ -42,7 +43,8 @@ const activeNames = ref<string[]>([
   'blockedThreads',
   'cpuConsumingThreads',
   'javaMonitors',
-  'callSiteTree'
+  'callSiteTree',
+  'threadSearch'
 ]);
 
 const deadLockCount = ref(0);
@@ -310,6 +312,10 @@ onMounted(() => {
 
           <el-collapse-item name="cpuConsumingThreads" :title="tdt('cpuConsumingThreadsLabel')">
             <CpuConsumingThreads />
+          </el-collapse-item>
+
+          <el-collapse-item name="threadSearch" :title="tdt('threadDumpSearch.label')">
+            <ThreadDumpSearch />
           </el-collapse-item>
 
           <el-collapse-item name="callSiteTree" :title="tdt('callSiteTree')">

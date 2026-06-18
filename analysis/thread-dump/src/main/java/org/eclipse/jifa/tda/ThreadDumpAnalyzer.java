@@ -38,6 +38,7 @@ import org.eclipse.jifa.tda.parser.ParserFactory;
 import org.eclipse.jifa.tda.util.CollectionUtil;
 import org.eclipse.jifa.tda.vo.Content;
 import org.eclipse.jifa.tda.vo.Overview;
+import org.eclipse.jifa.tda.vo.SearchHit;
 import org.eclipse.jifa.tda.vo.VBlockingThread;
 import org.eclipse.jifa.tda.vo.VFrame;
 import org.eclipse.jifa.tda.vo.VMonitor;
@@ -55,6 +56,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -450,6 +452,95 @@ public class ThreadDumpAnalyzer {
         return new ThreadDumpDiagnoser().analyze(
                 snapshot,
                 config != null ? config : new ThreadDumpAnalysisConfig());
+    }
+
+    /**
+     * Searches through all threads and returns those whose name, state or
+     * stack trace match all of the given terms.
+     *
+     * @param term              search terms; each term must match at least one of the
+     *                          enabled search fields (AND semantics across terms)
+     * @param searchName        include the thread name in the search (default: true)
+     * @param searchState       include the thread state in the search (default: true)
+     * @param searchStack       include the stack trace in the search (default: true)
+     * @param regex             treat terms as regular expressions (default: false)
+     * @param matchCase         perform a case-sensitive search (default: false)
+     * @param allowedJavaStates if non-empty, only include threads whose Java state is
+     *                          one of these values
+     * @return matching threads together with their raw content lines
+     */
+    public List<SearchHit> searchThreads(
+            @ApiParameterMeta(required = false) List<String> term,
+            @ApiParameterMeta(required = false) Boolean searchName,
+            @ApiParameterMeta(required = false) Boolean searchState,
+            @ApiParameterMeta(required = false) Boolean searchStack,
+            @ApiParameterMeta(required = false) Boolean regex,
+            @ApiParameterMeta(required = false) Boolean matchCase,
+            @ApiParameterMeta(required = false) List<String> allowedJavaStates) {
+        if (term == null || term.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        boolean doSearchName  = !Boolean.FALSE.equals(searchName);
+        boolean doSearchState = !Boolean.FALSE.equals(searchState);
+        boolean doSearchStack = !Boolean.FALSE.equals(searchStack);
+        boolean doRegex       = Boolean.TRUE.equals(regex);
+        int     flags         = Boolean.TRUE.equals(matchCase) ? 0 : Pattern.CASE_INSENSITIVE;
+
+        List<Pattern> patterns = term.stream()
+                .map(t -> Pattern.compile(doRegex ? t : Pattern.quote(t), flags))
+                .collect(Collectors.toList());
+
+        List<SearchHit> results = new ArrayList<>();
+
+        CollectionUtil.forEach(t -> {
+            // Optional state pre-filter
+            if (allowedJavaStates != null && !allowedJavaStates.isEmpty()) {
+                if (!(t instanceof JavaThread)) return;
+                JavaThread jt = (JavaThread) t;
+                String state = jt.getJavaThreadState() != null
+                        ? String.valueOf(jt.getJavaThreadState()) : "";
+                if (!allowedJavaStates.contains(state)) return;
+            }
+
+            List<String> rawLines;
+            try {
+                rawLines = rawContentOfThread(t.getId());
+            } catch (IOException e) {
+                rawLines = Collections.emptyList();
+            }
+
+            String nameStr  = t.getName() != null ? t.getName() : "";
+            String stateStr = getThreadState(t);
+            String stackStr = rawLines.size() > 1
+                    ? String.join("\n", rawLines.subList(1, rawLines.size()))
+                    : "";
+
+            boolean matches = patterns.stream().allMatch(p ->
+                    (doSearchName  && p.matcher(nameStr).find())
+                 || (doSearchState && p.matcher(stateStr).find())
+                 || (doSearchStack && p.matcher(stackStr).find())
+            );
+
+            if (matches) {
+                SearchHit hit = new SearchHit();
+                hit.setId(t.getId());
+                hit.setName(t.getName());
+                hit.setOsState(String.valueOf(t.getOsThreadState()));
+                if (t instanceof JavaThread) {
+                    JavaThread jt = (JavaThread) t;
+                    if (jt.getJavaThreadState() != null) {
+                        hit.setJavaState(String.valueOf(jt.getJavaThreadState()));
+                    }
+                }
+                if (t.getCpu() > 0)     hit.setCpu(t.getCpu());
+                if (t.getElapsed() > 0) hit.setElapsed(t.getElapsed());
+                hit.setLines(rawLines);
+                results.add(hit);
+            }
+        }, snapshot.getJavaThreads(), snapshot.getNonJavaThreads());
+
+        return results;
     }
 
     // ------------------------------------------------------------------

@@ -98,4 +98,25 @@ export default {
         "Keep in mind that creating stack traces is expensive – frequent exceptions can impact performance.",
     },
   },
+
+  // ----- Thread Search -----
+  threadDumpSearch: {
+    label: "Search Threads",
+    searchTitle: "Search Threads",
+    searchInput: "Search term",
+    advancedToggle: "Advanced",
+    searchFields: "Search Fields",
+    searchFieldName: "Thread Name",
+    searchFieldState: "Thread State",
+    searchFieldStack: "Stack Trace",
+    searchOptions: "Options",
+    searchOptionRegex: "Regular Expression",
+    searchOptionMatchCase: "Match Case",
+    searchOptionThreadStates: "Filter States",
+    searchOptionThreadStatesPlaceholder: "All states",
+    threadStatesChartTitle: "Thread States",
+    resultsCount: "threads found",
+    noResults: "No matching threads found.",
+    threadNameLabel: "Thread",
+  },
 }

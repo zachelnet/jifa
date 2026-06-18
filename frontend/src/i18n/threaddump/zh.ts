@@ -89,4 +89,25 @@ export default {
         "正在抛出异常的线程可能表明应用程序存在问题。请注意，创建堆栈跟踪开销很大，频繁抛出异常会影响性能。",
     },
   },
+
+  // ----- Thread Search -----
+  threadDumpSearch: {
+    label: "搜索线程",
+    searchTitle: "搜索线程",
+    searchInput: "搜索词",
+    advancedToggle: "高级",
+    searchFields: "搜索字段",
+    searchFieldName: "线程名称",
+    searchFieldState: "线程状态",
+    searchFieldStack: "调用栈",
+    searchOptions: "选项",
+    searchOptionRegex: "正则表达式",
+    searchOptionMatchCase: "区分大小写",
+    searchOptionThreadStates: "状态过滤",
+    searchOptionThreadStatesPlaceholder: "所有状态",
+    threadStatesChartTitle: "线程状态",
+    resultsCount: "个线程匹配",
+    noResults: "未找到匹配的线程。",
+    threadNameLabel: "线程",
+  },
 }
