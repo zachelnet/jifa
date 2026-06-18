@@ -28,13 +28,19 @@ import Content from '@/components/threaddump/Content.vue';
 import Thread from '@/components/threaddump/Thread.vue';
 import Monitor from '@/components/threaddump/Monitor.vue';
 import CallSiteTree from '@/components/threaddump/CallSiteTree.vue';
+import Diagnose from '@/components/threaddump/Diagnose.vue';
+import CpuConsumingThreads from '@/components/threaddump/CpuConsumingThreads.vue';
+import BlockedThreads from '@/components/threaddump/BlockedThreads.vue';
 
 const { request } = useAnalysisApiRequester();
 
 const activeNames = ref<string[]>([
   'basicInfo',
+  'diagnosis',
   'threadSummary',
   'threadGroupSummary',
+  'blockedThreads',
+  'cpuConsumingThreads',
   'javaMonitors',
   'callSiteTree'
 ]);
@@ -205,6 +211,10 @@ onMounted(() => {
             </el-table>
           </el-collapse-item>
 
+          <el-collapse-item name="diagnosis" :title="tdt('diagnosis.title')">
+            <Diagnose />
+          </el-collapse-item>
+
           <el-collapse-item name="threadSummary" :title="tdt('threadSummary')">
             <el-table stripe :show-header="false" :data="threadStats" v-loading="loading">
               <el-table-column type="expand">
@@ -290,8 +300,16 @@ onMounted(() => {
             </div>
           </el-collapse-item>
 
-          <el-collapse-item name="javaMonitors" title="Java Monitors">
+          <el-collapse-item name="javaMonitors" :title="tdt('monitors')">
             <Monitor />
+          </el-collapse-item>
+
+          <el-collapse-item name="blockedThreads" :title="tdt('blockedThreadsLabel')">
+            <BlockedThreads />
+          </el-collapse-item>
+
+          <el-collapse-item name="cpuConsumingThreads" :title="tdt('cpuConsumingThreadsLabel')">
+            <CpuConsumingThreads />
           </el-collapse-item>
 
           <el-collapse-item name="callSiteTree" :title="tdt('callSiteTree')">
