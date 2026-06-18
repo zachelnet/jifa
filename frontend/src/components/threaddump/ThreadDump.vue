@@ -28,15 +28,25 @@ import Content from '@/components/threaddump/Content.vue';
 import Thread from '@/components/threaddump/Thread.vue';
 import Monitor from '@/components/threaddump/Monitor.vue';
 import CallSiteTree from '@/components/threaddump/CallSiteTree.vue';
+import Diagnose from '@/components/threaddump/Diagnose.vue';
+import CpuConsumingThreads from '@/components/threaddump/CpuConsumingThreads.vue';
+import BlockedThreads from '@/components/threaddump/BlockedThreads.vue';
+import ThreadDumpSearch from '@/components/threaddump/ThreadDumpSearch.vue';
+import ThreadDumpOverview from '@/components/threaddump/ThreadDumpOverview.vue';
 
 const { request } = useAnalysisApiRequester();
 
 const activeNames = ref<string[]>([
   'basicInfo',
+  'diagnosis',
   'threadSummary',
   'threadGroupSummary',
+  'blockedThreads',
+  'cpuConsumingThreads',
   'javaMonitors',
-  'callSiteTree'
+  'callSiteTree',
+  'threadSearch',
+  'dumpOverview'
 ]);
 
 const deadLockCount = ref(0);
@@ -65,6 +75,7 @@ const loading = ref(false);
 const threadDialogVisible = ref(false);
 const selectedThreadType = ref();
 const selectedThreadGroup = ref();
+const selectedThreadState = ref();
 
 function sum(arr) {
   return arr.reduce((l, r) => l + r);
@@ -83,13 +94,55 @@ function sortIndices(counts) {
 function showThreads(type) {
   selectedThreadType.value = type;
   selectedThreadGroup.value = null;
+  selectedThreadState.value = null;
   threadDialogVisible.value = true;
 }
 
 function showThreadsOfGroup(group) {
   selectedThreadGroup.value = group;
   selectedThreadType.value = null;
+  selectedThreadState.value = null;
   threadDialogVisible.value = true;
+}
+
+function showThreadsByState(threadType, state) {
+  selectedThreadType.value = threadType;
+  selectedThreadGroup.value = null;
+  selectedThreadState.value = state;
+  threadDialogVisible.value = true;
+}
+
+function showThreadsOfGroupByState(group, state) {
+  selectedThreadGroup.value = group;
+  selectedThreadType.value = null;
+  selectedThreadState.value = state;
+  threadDialogVisible.value = true;
+}
+
+const STATE_COLORS: Record<string, string> = {
+  // JavaThreadState enum names (backend serialization)
+  RUNNABLE:                '#67c23a',   // green
+  SLEEPING:                '#e6a23c',   // orange
+  IN_OBJECT_WAIT:          '#409eff',   // blue
+  IN_OBJECT_WAIT_TIMED:    '#79bbff',   // light blue
+  PARKED:                  '#a855f7',   // purple
+  PARKED_TIMED:            '#7c3aed',   // dark purple
+  BLOCKED_ON_MONITOR_ENTER:'#f56c6c',   // red
+  NEW:                     '#95d475',   // light green
+  TERMINATED:              '#909399',   // gray
+  // OSTreadState enum names
+  MONITOR_WAIT:            '#f56c6c',   // red
+  COND_VAR_WAIT:           '#5c8ee6',   // steel blue
+  OBJECT_WAIT:             '#3b82f6',   // blue
+  BREAK_POINTED:           '#f0c419',   // yellow
+  ALLOCATED:               '#95d475',   // light green
+  INITIALIZED:             '#67c23a',   // green
+  ZOMBIE:                  '#606266',   // dark gray
+  UNKNOWN:                 '#606266',   // dark gray
+};
+
+function stateColor(state: string) {
+  return STATE_COLORS[state] ?? '#8892a4';
 }
 
 onMounted(() => {
@@ -120,16 +173,16 @@ onMounted(() => {
       }
     ];
 
-    function buildThreadStat(key, states, counts, icon, threadType?) {
-      return {
-        key,
-        value: sum(counts),
-        states,
-        counts,
-        icon: shallowRef(icon),
-        threadType
-      };
-    }
+function buildThreadStat(key, states, counts, icon, threadType?) {
+  return {
+    key,
+    value: sum(counts),
+    states,
+    counts,
+    icon: shallowRef(icon),
+    threadType
+  };
+}
 
     let _threadStats = [
       buildThreadStat(
@@ -182,8 +235,12 @@ onMounted(() => {
 </script>
 <template>
   <div class="ej-common-view-div" v-loading="loading">
-    <el-dialog v-model="threadDialogVisible">
-      <Thread :type="selectedThreadType" :group-name="selectedThreadGroup" />
+    <el-dialog v-model="threadDialogVisible" width="80%" destroy-on-close>
+      <Thread
+        :type="selectedThreadType"
+        :group-name="selectedThreadGroup"
+        :thread-state="selectedThreadState"
+      />
     </el-dialog>
 
     <el-scrollbar>
@@ -205,20 +262,25 @@ onMounted(() => {
             </el-table>
           </el-collapse-item>
 
+          <el-collapse-item name="diagnosis" :title="tdt('diagnosis.title')">
+            <Diagnose />
+          </el-collapse-item>
+
           <el-collapse-item name="threadSummary" :title="tdt('threadSummary')">
             <el-table stripe :show-header="false" :data="threadStats" v-loading="loading">
               <el-table-column type="expand">
                 <template #default="{ row }">
-                  <div style="padding: 4px 12px">
-                    <el-space size="large">
-                      <el-tag
-                        disable-transitions
-                        v-for="index in sortIndices(row.counts)"
-                        :key="index"
-                      >
-                        {{ `${row.states[index]}: ${row.counts[index]}` }}
-                      </el-tag>
-                    </el-space>
+                  <div style="padding: 6px 12px; display: flex; flex-wrap: wrap; gap: 6px">
+                    <el-tag
+                      v-for="idx in sortIndices(row.counts)"
+                      :key="idx"
+                      :color="stateColor(row.states[idx])"
+                      style="cursor: pointer; color: #fff; border: none"
+                      disable-transitions
+                      @click="showThreadsByState(row.threadType, row.states[idx])"
+                    >
+                      {{ row.states[idx] }}: {{ row.counts[idx] }}
+                    </el-tag>
                   </div>
                 </template>
               </el-table-column>
@@ -256,16 +318,17 @@ onMounted(() => {
             >
               <el-table-column type="expand">
                 <template #default="{ row }">
-                  <div style="padding: 4px 12px">
-                    <el-space size="large">
-                      <el-tag
-                        disable-transitions
-                        v-for="index in sortIndices(row.counts)"
-                        :key="index"
-                      >
-                        {{ `${row.states[index]}: ${row.counts[index]}` }}
-                      </el-tag>
-                    </el-space>
+                  <div style="padding: 6px 12px; display: flex; flex-wrap: wrap; gap: 6px">
+                    <el-tag
+                      v-for="idx in sortIndices(row.counts)"
+                      :key="idx"
+                      :color="stateColor(row.states[idx])"
+                      style="cursor: pointer; color: #fff; border: none"
+                      disable-transitions
+                      @click="showThreadsOfGroupByState(row.key, row.states[idx])"
+                    >
+                      {{ row.states[idx] }}: {{ row.counts[idx] }}
+                    </el-tag>
                   </div>
                 </template>
               </el-table-column>
@@ -290,8 +353,24 @@ onMounted(() => {
             </div>
           </el-collapse-item>
 
-          <el-collapse-item name="javaMonitors" title="Java Monitors">
+          <el-collapse-item name="javaMonitors" :title="tdt('monitors')">
             <Monitor />
+          </el-collapse-item>
+
+          <el-collapse-item name="blockedThreads" :title="tdt('blockedThreadsLabel')">
+            <BlockedThreads />
+          </el-collapse-item>
+
+          <el-collapse-item name="cpuConsumingThreads" :title="tdt('cpuConsumingThreadsLabel')">
+            <CpuConsumingThreads />
+          </el-collapse-item>
+
+          <el-collapse-item name="threadSearch" :title="tdt('threadDumpSearch.label')">
+            <ThreadDumpSearch />
+          </el-collapse-item>
+
+          <el-collapse-item name="dumpOverview" :title="tdt('threadDumpOverview.label')">
+            <ThreadDumpOverview />
           </el-collapse-item>
 
           <el-collapse-item name="callSiteTree" :title="tdt('callSiteTree')">

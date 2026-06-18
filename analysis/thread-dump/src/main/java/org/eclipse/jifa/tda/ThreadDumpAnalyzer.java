@@ -21,6 +21,9 @@ import org.eclipse.jifa.analysis.listener.ProgressListener;
 import org.eclipse.jifa.common.domain.request.PagingRequest;
 import org.eclipse.jifa.common.domain.vo.PageView;
 import org.eclipse.jifa.common.util.PageViewBuilder;
+import org.eclipse.jifa.tda.diagnoser.Diagnostic;
+import org.eclipse.jifa.tda.diagnoser.ThreadDumpAnalysisConfig;
+import org.eclipse.jifa.tda.diagnoser.ThreadDumpDiagnoser;
 import org.eclipse.jifa.tda.enums.MonitorState;
 import org.eclipse.jifa.tda.enums.ThreadType;
 import org.eclipse.jifa.tda.model.CallSiteTree;
@@ -35,6 +38,8 @@ import org.eclipse.jifa.tda.parser.ParserFactory;
 import org.eclipse.jifa.tda.util.CollectionUtil;
 import org.eclipse.jifa.tda.vo.Content;
 import org.eclipse.jifa.tda.vo.Overview;
+import org.eclipse.jifa.tda.vo.SearchHit;
+import org.eclipse.jifa.tda.vo.VBlockingThread;
 import org.eclipse.jifa.tda.vo.VFrame;
 import org.eclipse.jifa.tda.vo.VMonitor;
 import org.eclipse.jifa.tda.vo.VThread;
@@ -44,10 +49,16 @@ import java.io.IOException;
 import java.io.LineNumberReader;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Thread dump analyzer
@@ -176,13 +187,17 @@ public class ThreadDumpAnalyzer {
     }
 
     /**
-     * @param name   the thread name
-     * @param type   the thread type
-     * @param paging paging request
-     * @return the threads filtered by name and type
+     * @param name        the thread name filter (substring match, optional)
+     * @param type        the thread type filter (optional)
+     * @param threadState the Java or OS thread state to filter by (optional)
+     * @param ids         explicit list of thread ids to include (optional)
+     * @param paging      paging request
+     * @return the threads filtered by name, type, state and/or id
      */
     public PageView<VThread> threads(@ApiParameterMeta(required = false) String name,
                                      @ApiParameterMeta(required = false) ThreadType type,
+                                     @ApiParameterMeta(required = false) String threadState,
+                                     @ApiParameterMeta(required = false) List<Integer> ids,
                                      PagingRequest paging) {
         List<Thread> threads = new ArrayList<>();
         CollectionUtil.forEach(t -> {
@@ -192,10 +207,27 @@ public class ThreadDumpAnalyzer {
             if (StringUtils.isNotBlank(name) && !t.getName().contains(name)) {
                 return;
             }
+            if (StringUtils.isNotBlank(threadState) && !getThreadState(t).equals(threadState)) {
+                return;
+            }
+            if (ids != null && !ids.isEmpty() && !ids.contains(t.getId())) {
+                return;
+            }
             threads.add(t);
         }, snapshot.getJavaThreads(), snapshot.getNonJavaThreads());
 
         return buildVThreadPageView(threads, paging);
+    }
+
+    /** Returns the most specific state string for a thread (Java state if available, else OS state). */
+    private String getThreadState(Thread t) {
+        if (t instanceof JavaThread) {
+            JavaThread jt = (JavaThread) t;
+            if (jt.getJavaThreadState() != null) {
+                return String.valueOf(jt.getJavaThreadState());
+            }
+        }
+        return String.valueOf(t.getOsThreadState());
     }
 
     /**
@@ -304,5 +336,257 @@ public class ThreadDumpAnalyzer {
         Map<MonitorState, Integer> counts = new HashMap<>();
         map.forEach((s, l) -> counts.put(s, l.size()));
         return counts;
+    }
+
+    /**
+     * Returns all threads that are blocking at least one other thread via monitor
+     * ownership, sorted descending by number of blocked threads, then by blocker
+     * thread name.
+     *
+     * @return list of blocking threads with their blocked threads and held monitor
+     */
+    public List<VBlockingThread> blockingThreads() {
+        List<VBlockingThread> result = new ArrayList<>();
+
+        Map<Integer, Map<MonitorState, List<Thread>>> allMonitors = snapshot.getMonitorThreads();
+        for (Entry<Integer, Map<MonitorState, List<Thread>>> monitorEntry : allMonitors.entrySet()) {
+            Map<MonitorState, List<Thread>> monitorMap = monitorEntry.getValue();
+            if (!monitorMap.containsKey(MonitorState.LOCKED)) {
+                continue;
+            }
+            Thread blockingThread = monitorMap.get(MonitorState.LOCKED).stream().findFirst().orElse(null);
+            List<Thread> blockedThreads = new ArrayList<>();
+            if (monitorMap.containsKey(MonitorState.WAITING_TO_LOCK)) {
+                blockedThreads.addAll(monitorMap.get(MonitorState.WAITING_TO_LOCK));
+            }
+            if (monitorMap.containsKey(MonitorState.WAITING_TO_RE_LOCK)) {
+                blockedThreads.addAll(monitorMap.get(MonitorState.WAITING_TO_RE_LOCK));
+            }
+            if (!blockedThreads.isEmpty() && blockingThread != null) {
+                VBlockingThread r = new VBlockingThread();
+                r.setBlockedThreads(blockedThreads.stream()
+                        .map(this::convertToVThread)
+                        .collect(Collectors.toList()));
+                r.setBlockingThread(convertToVThread(blockingThread));
+                Monitor mon = findBlockingMonitor(blockedThreads.get(0));
+                if (mon != null) {
+                    r.setHeldLock(new VMonitor(
+                            mon.getRawMonitor().getId(),
+                            mon.getRawMonitor().getAddress(),
+                            mon.getRawMonitor().isClassInstance(),
+                            mon.getRawMonitor().getClazz(),
+                            mon.getState()));
+                }
+                result.add(r);
+            }
+        }
+
+        result.sort(Comparator
+                .<VBlockingThread>comparingInt(m -> m.getBlockedThreads().size())
+                .reversed()
+                .thenComparing(m -> m.getBlockingThread().getName()));
+        return result;
+    }
+
+    /**
+     * Returns the threads with the highest CPU usage, in descending order.
+     *
+     * @param type limit to threads of this type; {@code null} means all types
+     * @param max  maximum number of results; {@code -1} means unlimited
+     * @return list of threads sorted from most to least CPU-intensive
+     */
+    public List<VThread> cpuConsumingThreads(@ApiParameterMeta(required = false) ThreadType type,
+                                              int max) {
+        Stream<Thread> stream = snapshot.getThreadMap().values().stream()
+                .filter(t -> type == null || t.getType() == type);
+        stream = stream.sorted(Comparator.comparingDouble(Thread::getCpu).reversed())
+                .limit(max < 0 ? Integer.MAX_VALUE : max);
+        return stream.map(this::convertToVThread).collect(Collectors.toList());
+    }
+
+    /**
+     * Computes which threads consumed the most CPU <em>between</em> two thread
+     * dumps by matching threads via their native thread id ({@code tid}).
+     *
+     * @param other the second (later) thread dump analyzer
+     * @param max   maximum number of results; {@code -1} means unlimited
+     * @param type  limit to threads of this type; {@code null} means all types
+     * @return threads sorted by delta-CPU descending
+     */
+    public List<VThread> cpuConsumingThreadsCompare(ThreadDumpAnalyzer other, int max,
+                                                     @ApiParameterMeta(required = false) ThreadType type) {
+        int limit = max < 0 ? Integer.MAX_VALUE : max;
+        Map<Thread, Double> cpuDelta = new HashMap<>();
+        for (Thread first : snapshot.getThreadMap().values()) {
+            if (type != null && first.getType() != type) {
+                continue;
+            }
+            Thread second = other.snapshot.getThreadMap().values().stream()
+                    .filter(t -> t.getTid() == first.getTid())
+                    .findFirst().orElse(null);
+            if (second != null && second.getCpu() > 0) {
+                cpuDelta.put(first, second.getCpu() - first.getCpu());
+            }
+        }
+        List<VThread> result = new ArrayList<>();
+        cpuDelta.entrySet().stream()
+                .sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
+                .limit(limit)
+                .forEach(e -> {
+                    VThread vt = convertToVThread(e.getKey());
+                    vt.setCpu(e.getValue());
+                    result.add(vt);
+                });
+        return result;
+    }
+
+    /**
+     * Diagnoses the thread dump for potential issues based on the given
+     * configuration and returns any issues found.
+     *
+     * @param config the configuration to use; a default config is used if {@code null}
+     * @return potentially empty list of diagnostic issues
+     */
+    public List<Diagnostic> diagnose(
+            @ApiParameterMeta(required = false) ThreadDumpAnalysisConfig config) {
+        return new ThreadDumpDiagnoser().analyze(
+                snapshot,
+                config != null ? config : new ThreadDumpAnalysisConfig());
+    }
+
+    /**
+     * Searches through all threads and returns those whose name, state or
+     * stack trace match all of the given terms.
+     *
+     * @param term              search terms; each term must match at least one of the
+     *                          enabled search fields (AND semantics across terms)
+     * @param searchName        include the thread name in the search (default: true)
+     * @param searchState       include the thread state in the search (default: true)
+     * @param searchStack       include the stack trace in the search (default: true)
+     * @param regex             treat terms as regular expressions (default: false)
+     * @param matchCase         perform a case-sensitive search (default: false)
+     * @param allowedJavaStates if non-empty, only include threads whose Java state is
+     *                          one of these values
+     * @return matching threads together with their raw content lines
+     */
+    public List<SearchHit> searchThreads(
+            @ApiParameterMeta(required = false) List<String> term,
+            @ApiParameterMeta(required = false) Boolean searchName,
+            @ApiParameterMeta(required = false) Boolean searchState,
+            @ApiParameterMeta(required = false) Boolean searchStack,
+            @ApiParameterMeta(required = false) Boolean regex,
+            @ApiParameterMeta(required = false) Boolean matchCase,
+            @ApiParameterMeta(required = false) List<String> allowedJavaStates) {
+        if (term == null || term.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        boolean doSearchName  = !Boolean.FALSE.equals(searchName);
+        boolean doSearchState = !Boolean.FALSE.equals(searchState);
+        boolean doSearchStack = !Boolean.FALSE.equals(searchStack);
+        boolean doRegex       = Boolean.TRUE.equals(regex);
+        int     flags         = Boolean.TRUE.equals(matchCase) ? 0 : Pattern.CASE_INSENSITIVE;
+
+        List<Pattern> patterns = term.stream()
+                .map(t -> Pattern.compile(doRegex ? t : Pattern.quote(t), flags))
+                .collect(Collectors.toList());
+
+        List<SearchHit> results = new ArrayList<>();
+
+        CollectionUtil.forEach(t -> {
+            // Optional state pre-filter
+            if (allowedJavaStates != null && !allowedJavaStates.isEmpty()) {
+                if (!(t instanceof JavaThread)) return;
+                JavaThread jt = (JavaThread) t;
+                String state = jt.getJavaThreadState() != null
+                        ? String.valueOf(jt.getJavaThreadState()) : "";
+                if (!allowedJavaStates.contains(state)) return;
+            }
+
+            List<String> rawLines;
+            try {
+                rawLines = rawContentOfThread(t.getId());
+            } catch (IOException e) {
+                rawLines = Collections.emptyList();
+            }
+
+            String nameStr  = t.getName() != null ? t.getName() : "";
+            String stateStr = getThreadState(t);
+            String stackStr = rawLines.size() > 1
+                    ? String.join("\n", rawLines.subList(1, rawLines.size()))
+                    : "";
+
+            boolean matches = patterns.stream().allMatch(p ->
+                    (doSearchName  && p.matcher(nameStr).find())
+                 || (doSearchState && p.matcher(stateStr).find())
+                 || (doSearchStack && p.matcher(stackStr).find())
+            );
+
+            if (matches) {
+                SearchHit hit = new SearchHit();
+                hit.setId(t.getId());
+                hit.setName(t.getName());
+                hit.setOsState(String.valueOf(t.getOsThreadState()));
+                if (t instanceof JavaThread) {
+                    JavaThread jt = (JavaThread) t;
+                    if (jt.getJavaThreadState() != null) {
+                        hit.setJavaState(String.valueOf(jt.getJavaThreadState()));
+                    }
+                }
+                if (t.getCpu() > 0)     hit.setCpu(t.getCpu());
+                if (t.getElapsed() > 0) hit.setElapsed(t.getElapsed());
+                hit.setLines(rawLines);
+                results.add(hit);
+            }
+        }, snapshot.getJavaThreads(), snapshot.getNonJavaThreads());
+
+        return results;
+    }
+
+    // ------------------------------------------------------------------
+    // private helpers
+    // ------------------------------------------------------------------
+
+    /**
+     * Converts a model {@link Thread} to a lightweight {@link VThread} VO,
+     * copying cpu and elapsed times when available ({@code > 0}).
+     */
+    private VThread convertToVThread(Thread thread) {
+        VThread vt = new VThread();
+        vt.setId(thread.getId());
+        vt.setName(thread.getName());
+        if (thread.getCpu() > 0) {
+            vt.setCpu(thread.getCpu());
+        }
+        if (thread.getElapsed() > 0) {
+            vt.setElapsed(thread.getElapsed());
+        }
+        return vt;
+    }
+
+    /**
+     * Finds the monitor that a blocked thread is waiting to acquire by inspecting
+     * the thread-level monitor list and the first frame that carries monitor
+     * information.
+     */
+    private Monitor findBlockingMonitor(Thread thread) {
+        List<Monitor> candidates = new ArrayList<>();
+        if (thread instanceof JavaThread) {
+            JavaThread blockedThread = (JavaThread) thread;
+            if (blockedThread.getTrace() != null && blockedThread.getTrace().getFrames() != null) {
+                for (Frame frame : blockedThread.getTrace().getFrames()) {
+                    if (frame.getMonitors() != null) {
+                        Arrays.stream(frame.getMonitors()).forEach(candidates::add);
+                        // only the first frame with monitors is relevant
+                        break;
+                    }
+                }
+            }
+        }
+        return candidates.stream()
+                .filter(m -> m.getState() == MonitorState.WAITING_TO_LOCK
+                          || m.getState() == MonitorState.WAITING_TO_RE_LOCK)
+                .findFirst()
+                .orElse(null);
     }
 }
