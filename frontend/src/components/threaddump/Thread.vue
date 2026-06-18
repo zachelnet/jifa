@@ -24,6 +24,10 @@ const props = defineProps({
     type: String,
     required: false
   },
+  threadState: {
+    type: String,
+    required: false
+  },
   ids: {
     type: Array as () => number[],
     required: false
@@ -80,6 +84,7 @@ function loadThreads() {
       : {
           type,
           name: name.value,
+          threadState: props.threadState,
           ids: ids && ids.length > 0 ? ids : undefined,
           ...paging
         }
