@@ -110,4 +110,14 @@ export default {
     noResults: "未找到匹配的线程。",
     threadNameLabel: "线程",
   },
+
+  // ----- Thread Dump Overview / Compare -----
+  threadDumpOverview: {
+    label: "转储概览",
+    diagnosisTitle: "诊断",
+    stateDistributionTitle: "Java 线程状态分布",
+    cpuConsumingTitle: "CPU 占用最高的线程",
+    cpuConsumingDatasetLabel: "CPU（{unit}）",
+    threadGroupTitle: "线程组汇总",
+  },
 }

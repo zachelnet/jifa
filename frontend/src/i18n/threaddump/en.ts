@@ -119,4 +119,14 @@ export default {
     noResults: "No matching threads found.",
     threadNameLabel: "Thread",
   },
+
+  // ----- Thread Dump Overview / Compare -----
+  threadDumpOverview: {
+    label: "Dump Overview",
+    diagnosisTitle: "Diagnosis",
+    stateDistributionTitle: "Java Thread State Distribution",
+    cpuConsumingTitle: "Top CPU Consuming Threads",
+    cpuConsumingDatasetLabel: "CPU ({unit})",
+    threadGroupTitle: "Thread Group Summary",
+  },
 }
