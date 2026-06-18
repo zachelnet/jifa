@@ -1,0 +1,92 @@
+# Eclipse Jifa – Docker Compose
+#
+# Quickstart (standalone, no login):
+#   docker compose up -d
+#
+# With Keycloak OIDC:
+#   Uncomment the "keycloak" service and set the env vars under jifa accordingly.
+#   Then run: docker compose --profile keycloak up -d
+#
+# With MySQL (production):
+#   Uncomment the "db" service and the MYSQL_* env vars under jifa.
+#   Then run: docker compose --profile mysql up -d
+
+services:
+
+  # ─── Eclipse Jifa ──────────────────────────────────────────────────────────
+  jifa:
+    image: oci-reg.seeburger.de/devinfra/dumpanalyser/jifa:latest
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8102:8102"
+    volumes:
+      - jifa-storage:/jifa-storage
+    environment:
+      # ── Basic settings ──
+      # Allow users to log in (required for Keycloak / local accounts)
+      JIFA_ALLOW_LOGIN: "false"
+      # Allow unauthenticated access (set to false when using Keycloak)
+      JIFA_ALLOW_ANONYMOUS_ACCESS: "true"
+      # Allow new user self-registration
+      JIFA_ALLOW_REGISTRATION: "false"
+
+      # ── Local admin account (only used when JIFA_ALLOW_LOGIN=true) ──
+      # JIFA_ADMIN_USERNAME: admin
+      # JIFA_ADMIN_PASSWORD: changeme
+
+      # ── MySQL (comment in if using the 'db' service below) ──
+      # MYSQL_HOST: db
+      # MYSQL_DATABASE: jifa
+      # MYSQL_USER: jifa
+      # MYSQL_PASSWORD: jifa
+
+      # ── Keycloak OIDC (comment in and set JIFA_ALLOW_LOGIN=true) ──
+      # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID: jifa
+      # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET: <your-secret>
+      # SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI: https://your-keycloak.example.com/realms/your-realm
+
+    # Wait for DB if MySQL is enabled
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+  # ─── MySQL (optional, production-grade persistence) ────────────────────────
+  # profiles: [mysql]
+  # db:
+  #   image: mysql:8.4
+  #   restart: unless-stopped
+  #   environment:
+  #     MYSQL_DATABASE: jifa
+  #     MYSQL_USER: jifa
+  #     MYSQL_PASSWORD: jifa
+  #     MYSQL_ROOT_PASSWORD: rootpassword
+  #   volumes:
+  #     - mysql-data:/var/lib/mysql
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "jifa", "--password=jifa"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # ─── Keycloak (optional, for OIDC login) ────────────────────────────────────
+  # profiles: [keycloak]
+  # keycloak:
+  #   image: quay.io/keycloak/keycloak:25.0
+  #   restart: unless-stopped
+  #   command: start-dev
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     KEYCLOAK_ADMIN: admin
+  #     KEYCLOAK_ADMIN_PASSWORD: admin
+  #     KC_HTTP_RELATIVE_PATH: /
+  #   volumes:
+  #     - keycloak-data:/opt/keycloak/data
+
+volumes:
+  jifa-storage:
+  # mysql-data:
+  # keycloak-data:
