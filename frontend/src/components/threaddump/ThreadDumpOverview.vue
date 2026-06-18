@@ -95,7 +95,13 @@ const stateChartData = computed(() => {
 const doughnutOptions = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { position: 'right' as const } }
+  layout: { padding: 4 },
+  plugins: {
+    legend: {
+      position: 'bottom' as const,
+      labels: { boxWidth: 12, padding: 8, font: { size: 11 } }
+    }
+  }
 };
 
 // determine time unit for CPU bar chart
@@ -142,6 +148,12 @@ const barOptions = computed(() => ({
       }
     }
   },
+  scales: {
+    y: {
+      afterFit: (scale: any) => { scale.width = 200; },
+      ticks: { font: { size: 11 } }
+    }
+  },
   onClick: (_event: any, elements: any[]) => {
     if (elements.length) {
       const thread = cpuThreads.value[elements[0].index];
@@ -173,7 +185,13 @@ const groupBarOptions = {
   responsive: true,
   maintainAspectRatio: false,
   indexAxis: 'y' as const,
-  plugins: { legend: { display: false } }
+  plugins: { legend: { display: false } },
+  scales: {
+    y: {
+      afterFit: (scale: any) => { scale.width = 200; },
+      ticks: { font: { size: 11 } }
+    }
+  }
 };
 
 // ---- helpers ----
@@ -213,31 +231,37 @@ onMounted(async () => {
       </el-card>
 
       <!-- Charts row: state distribution + CPU -->
-      <el-row :gutter="16" style="margin-bottom: 16px">
+      <el-row :gutter="16" style="margin-bottom: 16px" align="stretch">
         <!-- Java Thread State Distribution -->
-        <el-col :span="12">
-          <el-card :header="tdt('threadDumpOverview.stateDistributionTitle')" style="height: 260px">
-            <Doughnut
-              :data="stateChartData"
-              :options="doughnutOptions"
-              style="height: 195px"
-            />
+        <el-col :span="8">
+          <el-card :header="tdt('threadDumpOverview.stateDistributionTitle')" style="height: 100%">
+            <div style="position: relative; height: 240px; overflow: hidden">
+              <Doughnut :data="stateChartData" :options="doughnutOptions" />
+            </div>
           </el-card>
         </el-col>
 
         <!-- Top CPU Consuming Threads -->
-        <el-col :span="12">
+        <el-col :span="16">
           <el-card
             :header="tdt('threadDumpOverview.cpuConsumingTitle')"
-            style="height: 260px"
+            style="height: 100%"
           >
-            <Bar
-              v-if="cpuThreads.length > 0"
-              :data="cpuChartData"
-              :options="barOptions"
-              style="height: 195px; cursor: pointer"
-            />
-            <el-empty v-else :description="'-'" style="height: 195px" />
+            <div
+              :style="{
+                position: 'relative',
+                height: cpuThreads.length > 0 ? `${Math.max(180, cpuThreads.length * 28)}px` : '180px',
+                overflow: 'hidden'
+              }"
+            >
+              <Bar
+                v-if="cpuThreads.length > 0"
+                :data="cpuChartData"
+                :options="barOptions"
+                style="cursor: pointer"
+              />
+              <el-empty v-else :description="'-'" style="height: 100%" />
+            </div>
           </el-card>
         </el-col>
       </el-row>
@@ -248,11 +272,15 @@ onMounted(async () => {
         :header="tdt('threadDumpOverview.threadGroupTitle')"
         style="margin-bottom: 16px"
       >
-        <Bar
-          :data="groupChartData"
-          :options="groupBarOptions"
-          style="height: 260px"
-        />
+        <div
+          :style="{
+            position: 'relative',
+            height: `${Math.max(180, topGroups.length * 28)}px`,
+            overflow: 'hidden'
+          }"
+        >
+          <Bar :data="groupChartData" :options="groupBarOptions" />
+        </div>
       </el-card>
     </template>
 
