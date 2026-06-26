@@ -74,13 +74,8 @@ tasks.named('compileJava') {
 
 import org.springframework.boot.gradle.tasks.run.BootRun
 
-import java.nio.file.Files
-
 tasks.named("processResources") {
-    if (!Files.exists(projectDir.toPath().resolve("src/main/resources/static"))
-            || gradle.startParameter.taskNames.contains("clean")) {
-        dependsOn(':frontend:build')
-    }
+    dependsOn(':frontend:moveStaticResourcesToServer')
 }
 
 tasks.named("clean") {
