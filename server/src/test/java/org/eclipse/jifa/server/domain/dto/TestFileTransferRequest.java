@@ -19,8 +19,8 @@ import org.eclipse.jifa.server.enums.FileTransferMethod;
 import org.eclipse.jifa.server.enums.FileType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 
 import java.util.Set;
 
@@ -124,10 +124,54 @@ public class TestFileTransferRequest {
         result = validator.validate(request);
         shouldBeIllegal(result, "url");
 
+        // Non http(s) schemes must be rejected to prevent local file disclosure (SSRF).
+        request = new FileTransferRequest();
+        request.setType(FileType.GC_LOG);
+        request.setMethod(FileTransferMethod.URL);
+        request.setUrl("file:///etc/passwd");
+        result = validator.validate(request);
+        shouldBeIllegal(result, "url");
+
+        request = new FileTransferRequest();
+        request.setType(FileType.GC_LOG);
+        request.setMethod(FileTransferMethod.URL);
+        request.setUrl("file://localhost/etc/passwd");
+        result = validator.validate(request);
+        shouldBeIllegal(result, "url");
+
+        request = new FileTransferRequest();
+        request.setType(FileType.GC_LOG);
+        request.setMethod(FileTransferMethod.URL);
+        request.setUrl("jar:file:/tmp/a.jar!/b");
+        result = validator.validate(request);
+        shouldBeIllegal(result, "url");
+
+        request = new FileTransferRequest();
+        request.setType(FileType.GC_LOG);
+        request.setMethod(FileTransferMethod.URL);
+        request.setUrl("ftp://example.org/data.txt");
+        result = validator.validate(request);
+        shouldBeIllegal(result, "url");
+
+        // A URL without a scheme is not a valid http(s) URL.
         request = new FileTransferRequest();
         request.setType(FileType.GC_LOG);
         request.setMethod(FileTransferMethod.URL);
         request.setUrl("url");
+        result = validator.validate(request);
+        shouldBeIllegal(result, "url");
+
+        request = new FileTransferRequest();
+        request.setType(FileType.GC_LOG);
+        request.setMethod(FileTransferMethod.URL);
+        request.setUrl("http://example.org/data.txt");
+        result = validator.validate(request);
+        assertEquals(0, result.size());
+
+        request = new FileTransferRequest();
+        request.setType(FileType.GC_LOG);
+        request.setMethod(FileTransferMethod.URL);
+        request.setUrl("https://example.org/data.txt");
         result = validator.validate(request);
         assertEquals(0, result.size());
     }
